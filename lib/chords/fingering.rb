@@ -1,132 +1,71 @@
 require 'forwardable'
 
+class Array
+  def sum; inject(0) {|sum, n| sum += n}; end
+  def mean; sum/size; end
+end
+
 module Chords
-  
   class Fingering
-    DEFAULT_MAX_FRET_DISTANCE = 3
-    
+    attr_reader :fretboard, :presses, :chord, :stretch
     extend Forwardable
+    def_delegators :@presses, :[], :==, :inspect, :each, :each_with_index
     
-    def_delegators :@positions, :[], :==, :inspect, :each, :each_with_index
+    def initialize(fretboard, chord, presses=nil)
+      @fretboard, @chord = fretboard, chord
+      @presses           = presses || []
+      @stretch           = fretboard.stretch || 7
+    end
     
-    def initialize(fretboard, positions=nil)
-      @fretboard = fretboard
-      @positions = positions || ([nil] * @fretboard.open_notes.size)
+    def fork(presses)
+      self.class.new(@fretboard, @chord, presses)
     end
     
     def self.find_variations(fretboard, chord, opts={})
-      fingering = Fingering.new(fretboard)
-      fingerings = fingering.expand(chord.notes.first)
-      
-      chord.notes[1..-1].each do |note|
-        fingerings = fingerings.map{|f| f.expand(note, opts)}.flatten(1)
-      end
-      
-      (opts[:duplicates] || 0).times do
-        fingerings = fingerings.map{|f| f.add_duplicate(opts)}.flatten(1).uniq
-      end
-      
-      fingerings
+      fingering = Fingering.new(fretboard, chord)
+
+      fingering.trace(1).select(&:appropriate).map(&:presses)
     end
     
-    # Returns all fingering variations of this fingering
-    # expanded with note.
-    # Expanded note wil be on a higher string than existing notes.
-    # It will also be the highest note.
-    def expand(note, opts={})
-      max_fret_distance = opts[:max_fret_distance] || DEFAULT_MAX_FRET_DISTANCE
-      
-      fingerings = []
-      
-      ((highest_used_string+1)..(@positions.size-1)).each do |str_i|
-        new_note_positions(note, str_i, max_fret_distance).each do |pos|
-          if (@fretboard.open_notes[str_i] + pos) > highest_note
-            new_positions = @positions.dup
-            new_positions[str_i] = pos
-            fingerings << Fingering.new(@fretboard, new_positions)
-          end
-        end
-      end
-      
-      fingerings
-    end
-    
-    # returns variations of this fingering with one duplicate note added
-    def add_duplicate(opts={})
-      return [] if unused_strings < 1
-      max_fret_distance = opts[:max_fret_distance] || DEFAULT_MAX_FRET_DISTANCE
-      
-      fingerings = []
-      
-      @positions.each_with_index do |pos, i|
-        next unless pos.nil?
+    # Builds a chord starting with the the bottom string, picking one note at a time and building
+    # a tree while moving up the strings, searching for complementing notes.
+    # Repeat until all strings are filled.
+    def trace(string)
+      return self if string > @fretboard.open_notes.size
+      open_note = @fretboard.open_notes[string-1]
+
+      @chord.notes.inject([]) do |acc, chord_note|
+        next_press = (chord_note.new.value - open_note.value) % 12 # the fret to press on the open string to get chord_note
         
-        each_note do |note|
-          new_note_positions(note, i, max_fret_distance).each do |pos|
-            new_positions = @positions.dup
-            new_positions[i] = pos
-            fingerings << Fingering.new(@fretboard, new_positions)
-          end
+        [next_press, next_press+12].each do |np|
+          acc << fork([presses, np].flatten).trace(string+1) if chord?(np)
         end
-      end
-      
-      fingerings
+        
+        acc.flatten
+      end.sort
     end
     
-    def each_note
-      @positions.each_with_index do |pos, i|
-        yield((@fretboard.open_notes[i] + pos).class) unless pos.nil?
-      end
+    # Make sure that the new finger press isn't too far from those already placed.
+    def stretchable?(next_press)
+      @presses.all? {|p| p == 0 || (p - next_press).abs < @stretch}
     end
     
-    def eql?(other)
-      self.hash == other.hash
+    # The next press has to be within finger's reach and also on the fretboard?
+    def chord?(next_press)
+      stretchable?(next_press) && (0..@fretboard.frets).include?(next_press)
     end
     
-    def hash
-      @positions.hash
+    # do different checks here? Not inverted?
+    def appropriate
+      notes.map(&:class).uniq.size >= @chord.notes.size
     end
     
-    private
-    
-    def new_note_positions(note, string_index, max_fret_distance)
-      positions = []
-      open_note = @fretboard.open_notes[string_index]
-      pos = note.new(open_note.octave).value - open_note.value
-      pos += 12 if pos < 0
-      
-      while pos <= @fretboard.frets
-        positions << pos if distance(pos) <= max_fret_distance
-        pos += 12
-      end
-      positions
+    def notes
+      @notes ||= fretboard.fretted_notes(presses)
     end
     
-    def distance(position)
-      pos_arr = (@positions + [position]).select{|p| !p.nil? && p > 0}
-      (pos_arr.max || 0) - (pos_arr.min || 0)
+    def <=>(other)
+      presses.mean <=> (other.respond_to?(:presses) ? other.presses.mean : other)
     end
-    
-    def unused_strings
-      @fretboard.open_notes.size - @positions.compact.size
-    end
-    
-    def highest_used_string
-      indices = []
-      @positions.each_with_index do |pos,i|
-        indices << i unless pos.nil?
-      end
-      indices.max || -1
-    end
-    
-    def highest_note
-      notes = []
-      @positions.each_with_index do |pos,i|
-        notes << @fretboard.open_notes[i] + pos unless pos.nil?
-      end
-      notes.max || (@fretboard.open_notes.min - 1)
-    end
-    
   end
-  
 end

@@ -28,3 +28,32 @@ Total 9 fingerings.
 
 => nil
 >>
+
+
+
+Forked to work for mandolins?
+====== (—kjell, 3/18/2010)
+
+I don't particularly know what I'm doing, but I threw in a new chord finding 
+algorithm that I like better and I hope isn't completely broken. Tests probably 
+all fail. I'm using it to find mandolin chords and it's working to my liking.
+
+It doesn't respect the order of the notes, so when you ask for a G.major it
+hands back G.major (G, B, D) and what I believe are the first (B, D, G) and 
+second (D, G, B)  inversions. I know nothing of music theory, to me a G chord
+is all of the three above. (In fact to me a G chord is the shape my fingers 
+make starting at a particular spot on the fretboard, helas.)
+
+I'm using it like this:
+
+require 'chords'
+include Chords
+
+Fingering::DEFAULT_MAX_FRET_DISTANCE = 7 # Mandolins have teeny frets and 4 strings
+DEFAULT_FRETBOARD = mando = Fretboard.new([G.new(1), D.new(1), A.new(2), E.new(3)], 17)
+
+%w[C.major E.major.seventh A.major.seventh D.major.seventh F.major G.major.seventh].each do |c|
+  puts c
+  mando.print(eval(c))
+  puts
+end

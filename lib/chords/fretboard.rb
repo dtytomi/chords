@@ -41,6 +41,7 @@ module Chords
               }
     
     attr_reader :frets, :open_notes
+    attr_accessor :stretch
     
     def initialize(open_notes, frets)
       @open_notes, @frets = open_notes, frets
@@ -62,6 +63,10 @@ module Chords
     def print(chord, opts={})
       fingerings = find(chord, opts)
       @formatter.print(fingerings)
+    end
+    
+    def fretted_notes(presses)
+      open_notes.zip(presses).map {|open, pressed| (open + pressed)}
     end
     
   end
