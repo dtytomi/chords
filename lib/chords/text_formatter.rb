@@ -1,10 +1,9 @@
-
 module Chords
-  
   class TextFormatter
     
     def initialize(fretboard)
-      @fretboard = fretboard
+      @fretboard    = fretboard
+      @output_width = 150
     end
     
     def print(fingerings)
@@ -20,10 +19,10 @@ module Chords
       while rows.first.length > idx
         parts = []
         rows.each_with_index do |row, i| 
-          parts << "#{@fretboard.open_notes[i].name.rjust(2, ' ')}: " + row[idx...(idx+75)]
+          parts << "#{@fretboard.open_notes[i].name.rjust(2, ' ')}: " + row[idx...(idx+@output_width)]
         end
         puts "\n" + (parts.reverse.join("\n")) + "\n\n"
-        idx += 75
+        idx += @output_width
       end
       
       puts "Total #{fingerings.size} fingerings."
